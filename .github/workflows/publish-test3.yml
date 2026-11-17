@@ -1,0 +1,48 @@
+name: Publish Test 3
+on:
+  push:
+    paths:
+      - '.github/workflows/publish-test3.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and validate package
+        run: |
+          python3 - <<'PY'
+          import base64, zipfile
+          from pathlib import Path
+          data = base64.b64decode(Path('downloads/BitLockerManager-x64-test3.zip.b64').read_text().strip(), validate=True)
+          assert len(data) == 52594, "Unexpected package length"
+          Path('BitLockerManager-x64-test3.zip').write_bytes(data)
+          with zipfile.ZipFile('BitLockerManager-x64-test3.zip') as z:
+              assert z.testzip() is None
+              assert 'BitLockerManager/bdemgr.exe' in z.namelist()
+          PY
+      - name: Publish experimental release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          cat > notes.md <<'NOTES'
+          Test 3 adds a progress bar and automatic status polling every two seconds while encryption or decryption is active.
+
+          Decryption progress is 100 minus the encrypted percentage. Completion is displayed only when Windows reports Fully Decrypted. Rounded zero remaining during an active conversion is shown as 99% until completion is confirmed.
+
+          Includes English UI, native x64 EXE, source code and optional drive integration scripts. Extract and run bdemgr.exe directly to test first.
+
+          Progress calculation boundary tests, strict cross-compilation and ZIP integrity checks passed. Windows/WinPE UI and real-volume behavior remain unverified. Requires valid unlock credentials and BitLocker WMI; PE needs WMI and SecureStartup components.
+
+          Independently implemented; not a patched Anhdv binary.
+          NOTES
+          if gh release view v1.0.0-test.3 >/dev/null 2>&1; then
+            gh release upload v1.0.0-test.3 BitLockerManager-x64-test3.zip --clobber
+            gh release edit v1.0.0-test.3 --notes-file notes.md --prerelease
+          else
+            gh release create v1.0.0-test.3 BitLockerManager-x64-test3.zip --target "$RELEASE_COMMIT" --title "BitLocker Manager x64 - Test 3" --notes-file notes.md --prerelease
+          fi
